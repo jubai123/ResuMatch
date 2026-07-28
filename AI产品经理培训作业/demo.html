@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>应届匹配 · 本周匹配</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cn-fontsource-source-han-sans-sc-vf@1.0.10/font.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <style>
+    :root {
+      --brand:#2563eb; --cta:#ff6b35; --success:#10b981; --warning:#f59e0b;
+      --text:#111827; --muted:#6b7280; --bg:#f9fafb; --card:#fff; --line:#e5e7eb;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; color:var(--text); background:#eef2f7;
+      font-family:"Source Han Sans SC VF","Source Han Sans SC",sans-serif;
+      font-size:15px;
+    }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    .app {
+      width:min(100%,430px); min-height:100dvh; margin:auto; background:var(--bg);
+      padding-bottom:82px; box-shadow:0 0 32px #11182714;
+    }
+    header {
+      position:sticky; top:0; z-index:10; display:flex; align-items:center;
+      height:64px; padding:0 16px; gap:12px; background:#ffffffeb;
+      border-bottom:1px solid var(--line); backdrop-filter:blur(14px);
+    }
+    .icon-btn {
+      width:40px; height:40px; border:0; border-radius:8px;
+      color:var(--text); background:transparent; font-size:20px;
+    }
+    .icon-btn:active { background:#eff6ff; color:var(--brand); }
+    .title { flex:1; font-size:18px; font-weight:650; }
+    .notify { position:relative; }
+    .badge {
+      position:absolute; top:3px; right:2px; min-width:16px; height:16px;
+      padding:0 4px; color:#fff; background:#ef4444; border:2px solid #fff;
+      border-radius:9px; font-size:9px; line-height:12px;
+    }
+    .search {
+      display:none; padding:0 16px 12px; background:#fff; border-bottom:1px solid var(--line);
+    }
+    .search.show { display:block; }
+    .search input {
+      width:100%; height:40px; padding:0 12px; border:1px solid var(--line);
+      border-radius:8px; outline:0; background:var(--bg);
+    }
+    .search input:focus { border-color:var(--brand); box-shadow:0 0 0 3px #2563eb18; }
+    main { padding:16px; }
+    .summary {
+      padding:20px; border-radius:12px; color:#fff; background:var(--brand);
+      box-shadow:0 8px 24px #2563eb24;
+    }
+    .summary-top { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+    h1 { margin:0; font-size:18px; font-weight:650; }
+    .summary small { font-size:13px; color:#dbeafe; white-space:nowrap; }
+    .progress-row { display:flex; align-items:center; gap:12px; margin:16px 0 12px; }
+    .progress { flex:1; height:8px; overflow:hidden; border-radius:8px; background:#ffffff40; }
+    .progress i { display:block; width:12%; height:100%; border-radius:inherit; background:#fff; transition:.25s; }
+    .percent { min-width:32px; font-size:13px; text-align:right; }
+    .deadline { margin:0; font-size:13px; color:#dbeafe; }
+    .section-title {
+      display:flex; align-items:center; justify-content:space-between;
+      margin:24px 2px 12px;
+    }
+    .section-title h2 { margin:0; font-size:18px; font-weight:650; }
+    .section-title span { color:var(--muted); font-size:13px; }
+    .job-list { display:grid; gap:12px; }
+    .job {
+      padding:16px; border:1px solid var(--line); border-radius:12px;
+      background:var(--card); box-shadow:0 4px 16px #11182708;
+    }
+    .company-row,.meta,.actions { display:flex; align-items:center; }
+    .company-row { justify-content:space-between; gap:12px; }
+    .company { color:var(--muted); font-size:13px; }
+    .company i { margin-right:6px; color:var(--brand); }
+    .score { color:var(--success); font-size:13px; font-weight:650; white-space:nowrap; }
+    .score.mid { color:var(--warning); }
+    .job h3 { margin:8px 0 6px; font-size:18px; line-height:1.45; font-weight:650; }
+    .meta { flex-wrap:wrap; gap:6px; color:var(--muted); font-size:13px; }
+    .meta span+span::before { content:"·"; margin-right:6px; color:#9ca3af; }
+    .ai {
+      margin:16px 0; padding:12px; border-radius:8px;
+      color:#1e3a8a; background:#eff6ff; font-size:13px; line-height:1.65;
+    }
+    .ai strong { display:block; margin-bottom:2px; color:var(--brand); font-weight:650; }
+    .actions { gap:8px; }
+    .action {
+      min-height:38px; padding:0 11px; border:1px solid var(--line);
+      border-radius:8px; color:var(--text); background:#fff; font-size:13px;
+    }
+    .action.primary { flex:1; color:#fff; border-color:var(--cta); background:var(--cta); }
+    .action.secondary { flex:1; }
+    .action.square { width:40px; padding:0; }
+    .action[aria-pressed="true"] { color:#fff; border-color:var(--brand); background:var(--brand); }
+    .details {
+      display:none; margin-top:12px; padding-top:12px; border-top:1px solid var(--line);
+      color:var(--muted); font-size:13px; line-height:1.7;
+    }
+    .details.show { display:block; }
+    .more {
+      display:block; margin:16px auto 0; padding:10px 20px; border:0;
+      color:var(--brand); background:transparent; font-weight:650;
+    }
+    nav {
+      position:fixed; z-index:10; left:50%; bottom:0; width:min(100%,430px);
+      height:72px; transform:translateX(-50%); display:grid; grid-template-columns:repeat(4,1fr);
+      padding:8px 8px max(8px,env(safe-area-inset-bottom)); background:#fff;
+      border-top:1px solid var(--line);
+    }
+    .tab { border:0; color:var(--muted); background:transparent; font-size:11px; }
+    .tab i { display:block; margin-bottom:3px; font-size:20px; }
+    .tab.active { color:var(--brand); font-weight:650; }
+    .toast {
+      position:fixed; z-index:20; left:50%; bottom:88px; transform:translate(-50%,12px);
+      padding:10px 14px; color:#fff; background:#111827e8; border-radius:8px;
+      font-size:13px; opacity:0; pointer-events:none; transition:.2s;
+    }
+    .toast.show { opacity:1; transform:translate(-50%,0); }
+    @media (max-width:340px) {
+      main { padding:12px; } .summary,.job { padding:14px; }
+      .action { padding:0 8px; } .job h3 { font-size:16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <button class="icon-btn" aria-label="菜单"><i class="bi bi-list"></i></button>
+      <div class="title">应届匹配</div>
+      <button class="icon-btn" id="searchBtn" aria-label="搜索"><i class="bi bi-search"></i></button>
+      <button class="icon-btn notify" id="notifyBtn" aria-label="3 条通知">
+        <i class="bi bi-bell"></i><span class="badge">3</span>
+      </button>
+    </header>
+    <div class="search" id="searchBox">
+      <input id="searchInput" type="search" placeholder="搜索公司或岗位" aria-label="搜索公司或岗位">
+    </div>
+
+    <main>
+      <section class="summary" aria-label="本周浏览进度">
+        <div class="summary-top">
+          <h1>本周为你匹配 100 条</h1>
+          <small>已浏览 <b id="viewed">12</b></small>
+        </div>
+        <div class="progress-row">
+          <div class="progress"><i id="progressBar"></i></div>
+          <span class="percent" id="percent">12%</span>
+        </div>
+        <p class="deadline"><i class="bi bi-clock"></i> 距离本周推送结束还剩 5 天</p>
+      </section>
+
+      <div class="section-title">
+        <h2>高匹配岗位</h2><span>按匹配分排序</span>
+      </div>
+
+      <section class="job-list" id="jobList">
+        <article class="job" data-name="字节跳动 算法工程师">
+          <div class="company-row">
+            <span class="company"><i class="bi bi-buildings"></i>字节跳动</span>
+            <span class="score"><i class="bi bi-stars"></i> 92 分</span>
+          </div>
+          <h3>算法工程师（校招）· 北京</h3>
+          <div class="meta"><span>25–40K</span><span>16 薪</span><span>本科及以上</span></div>
+          <div class="ai">
+            <strong><i class="bi bi-lightbulb"></i> AI 匹配解释</strong>
+            你的 Python 与数据分析项目契合岗位要求，机器学习经验是关键加分项。
+          </div>
+          <div class="actions">
+            <button class="action primary feedback"><i class="bi bi-heart"></i> 想投</button>
+            <button class="action secondary feedback"><i class="bi bi-hand-thumbs-down"></i> 不合适</button>
+            <button class="action square seen" aria-label="标记已浏览"><i class="bi bi-eye"></i></button>
+            <button class="action square detail-btn" aria-label="展开详情"><i class="bi bi-chevron-down"></i></button>
+          </div>
+          <div class="details">岗位亮点：推荐系统核心团队，面向应届生开放；支持北京办公与导师带教。</div>
+        </article>
+
+        <article class="job" data-name="腾讯 产品经理">
+          <div class="company-row">
+            <span class="company"><i class="bi bi-buildings"></i>腾讯</span>
+            <span class="score mid"><i class="bi bi-stars"></i> 89 分</span>
+          </div>
+          <h3>产品经理（校招）· 深圳</h3>
+          <div class="meta"><span>18–30K</span><span>14 薪</span><span>本科及以上</span></div>
+          <div class="ai">
+            <strong><i class="bi bi-lightbulb"></i> AI 匹配解释</strong>
+            你的校园产品实践与用户研究经历匹配度高，数据指标意识是优势。
+          </div>
+          <div class="actions">
+            <button class="action primary feedback"><i class="bi bi-heart"></i> 想投</button>
+            <button class="action secondary feedback"><i class="bi bi-hand-thumbs-down"></i> 不合适</button>
+            <button class="action square seen" aria-label="标记已浏览"><i class="bi bi-eye"></i></button>
+            <button class="action square detail-btn" aria-label="展开详情"><i class="bi bi-chevron-down"></i></button>
+          </div>
+          <div class="details">岗位亮点：参与亿级用户产品，重视用户洞察、跨团队协作和数据复盘。</div>
+        </article>
+      </section>
+      <button class="more" id="moreBtn">加载更多 <i class="bi bi-chevron-down"></i></button>
+    </main>
+
+    <nav aria-label="主导航">
+      <button class="tab active"><i class="bi bi-house-door-fill"></i>推荐</button>
+      <button class="tab"><i class="bi bi-search"></i>岗位库</button>
+      <button class="tab"><i class="bi bi-inbox"></i>投递台</button>
+      <button class="tab"><i class="bi bi-person"></i>我的</button>
+    </nav>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
+    const toast = msg => { const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(el.t); el.t=setTimeout(()=>el.classList.remove('show'),1400); };
+    $('#searchBtn').onclick=()=>{ $('#searchBox').classList.toggle('show'); $('#searchInput').focus(); };
+    $('#searchInput').oninput=e=>$$('.job').forEach(card=>card.hidden=!card.dataset.name.includes(e.target.value.trim()));
+    $('#notifyBtn').onclick=()=>{ $('.badge')?.remove(); toast('通知已全部读完'); };
+    $$('.detail-btn').forEach(btn=>btn.onclick=()=>{ const d=btn.closest('.job').querySelector('.details'); d.classList.toggle('show'); btn.querySelector('i').className=`bi bi-chevron-${d.classList.contains('show')?'up':'down'}`; });
+    $$('.feedback').forEach(btn=>btn.onclick=()=>{ const row=btn.parentElement; row.querySelectorAll('.feedback').forEach(x=>x.setAttribute('aria-pressed','false')); btn.setAttribute('aria-pressed','true'); toast(btn.textContent.trim()==='想投'?'已加入投递台':'已减少同类推荐'); });
+    $$('.seen').forEach(btn=>btn.onclick=()=>{ if(btn.dataset.done)return; btn.dataset.done=1; btn.setAttribute('aria-pressed','true'); const n=+$('#viewed').textContent+1; $('#viewed').textContent=n; $('#percent').textContent=n+'%'; $('#progressBar').style.width=n+'%'; toast('已标记为浏览'); });
+    $('#moreBtn').onclick=()=>toast('本页原型仅展示前 2 条');
+    $$('.tab:not(.active), header .icon-btn:first-child').forEach(btn=>btn.onclick=()=>toast('MVP 原型仅展示推荐首页'));
+  </script>
+</body>
+</html>

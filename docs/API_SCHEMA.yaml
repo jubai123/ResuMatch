@@ -1,0 +1,896 @@
+openapi: "3.0.3"
+info:
+  title: ResuMatch API
+  version: "1.0.0"
+  description: |
+    应届生个人简历市场匹配助手 — 后端 API 契约。
+    本文件是前后端通信的硬规范，Mock 数据、TypeScript 类型、Pydantic 模型均据此生成。
+
+servers:
+  - url: http://localhost:8000/api
+    description: 本地开发
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ═══════════════════════════════════════════════════════════
+  # Auth 认证模块
+  # ═══════════════════════════════════════════════════════════
+  /auth/sms:
+    post:
+      tags: [Auth]
+      summary: 发送短信验证码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  pattern: '^1[3-9]\d{9}$'
+      responses:
+        "200":
+          description: 发送成功，返回重发倒计时
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  retryAfter: { type: integer, description: "秒", example: 60 }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 手机号+验证码登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, code]
+              properties:
+                phone: { type: string }
+                code: { type: string, minLength: 4, maxLength: 6 }
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  user: { $ref: "#/components/schemas/User" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新 accessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+
+  # ═══════════════════════════════════════════════════════════
+  # User 用户模块
+  # ═══════════════════════════════════════════════════════════
+  /user/profile:
+    get:
+      tags: [User]
+      summary: 获取当前用户信息
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    patch:
+      tags: [User]
+      summary: 更新用户信息（昵称/头像）
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nickname: { type: string }
+                avatar: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /user/verify-student:
+    post:
+      tags: [User]
+      summary: 提交学生认证（上传学信网截图）
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [pending, approved, rejected] }
+
+  # ═══════════════════════════════════════════════════════════
+  # Resume 简历模块
+  # ═══════════════════════════════════════════════════════════
+  /resume:
+    get:
+      tags: [Resume]
+      summary: 获取当前用户的当前简历
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resume"
+
+  /resume/upload:
+    post:
+      tags: [Resume]
+      summary: 上传简历文件（PDF/Word/图片），自动解析
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: "PDF/Word/图片" }
+                source: { type: string, enum: [pdf, word, photo, wechat], default: pdf }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resume"
+
+  /resume/online:
+    post:
+      tags: [Resume]
+      summary: 在线填写简历
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResumeStructure"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Resume"
+
+  /resume/{resumeId}/rewrite:
+    post:
+      tags: [Resume]
+      summary: 触发 AI 简历改写（异步，返回 taskId 用于轮询）
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: resumeId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId: { type: string }
+
+  /resume/{resumeId}/rewrite/{taskId}:
+    get:
+      tags: [Resume]
+      summary: 轮询 AI 改写结果
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: resumeId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [processing, done, failed] }
+                  suggestions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AiRewriteRecord"
+
+  /resume/{resumeId}/rewrite/accept:
+    post:
+      tags: [Resume]
+      summary: 接受/拒绝/微调某条改写建议
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: resumeId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [field, action]
+              properties:
+                field: { type: string, description: "如 projects.0.description" }
+                action: { type: string, enum: [accepted, rejected, modified] }
+                modifiedText: { type: string, description: "微调后的文本（仅 action=modified 时）" }
+      responses:
+        "200": { description: "已更新" }
+
+  /resume/history:
+    get:
+      tags: [Resume]
+      summary: 获取简历历史版本列表
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    version: { type: integer }
+                    createdAt: { type: string, format: date-time }
+                    isCurrent: { type: boolean }
+
+  # ═══════════════════════════════════════════════════════════
+  # Preference 偏好模块
+  # ═══════════════════════════════════════════════════════════
+  /preference:
+    get:
+      tags: [Preference]
+      summary: 获取用户偏好设置
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preference"
+    put:
+      tags: [Preference]
+      summary: 全量更新偏好设置
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Preference"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preference"
+
+  # ═══════════════════════════════════════════════════════════
+  # Match 匹配模块
+  # ═══════════════════════════════════════════════════════════
+  /match/initial:
+    post:
+      tags: [Match]
+      summary: 新用户首次匹配（立即返回 Top 5）
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MatchResult"
+                    maxItems: 5
+
+  /match/weekly:
+    get:
+      tags: [Match]
+      summary: 获取本周推送列表（支持分页 + 分层）
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: week
+          in: query
+          schema: { type: string, example: "2026-W31" }
+          description: "不传则取当前周"
+        - name: scoreMin
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100 }
+          description: "匹配分下限筛选，用于分层加载"
+        - name: scoreMax
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 100 }
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, interested, deferred, not_interested] }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, maximum: 50 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchInfo:
+                    type: object
+                    properties:
+                      weekOf: { type: string, format: date }
+                      totalCount: { type: integer }
+                      processedCount: { type: integer }
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MatchResult"
+
+  /match/{matchId}/feedback:
+    post:
+      tags: [Match]
+      summary: 用户对匹配结果的反馈
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [interested, not_interested, deferred, applied, communicating, interviewing, offered, rejected]
+                reason:
+                  type: string
+                  description: "不感兴趣的原因（可选）"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchResult"
+
+  # ═══════════════════════════════════════════════════════════
+  # Job 岗位模块
+  # ═══════════════════════════════════════════════════════════
+  /job/{jobId}:
+    get:
+      tags: [Job]
+      summary: 获取岗位详情（含当前用户的匹配分）
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobDetail"
+
+  /job/search:
+    get:
+      tags: [Job]
+      summary: 岗位库搜索
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: keyword
+          in: query
+          schema: { type: string }
+        - name: city
+          in: query
+          schema: { type: string }
+        - name: industry
+          in: query
+          schema: { type: string }
+        - name: salaryMin
+          in: query
+          schema: { type: integer }
+        - name: degree
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20, maximum: 50 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/JobSummary"
+
+  # ═══════════════════════════════════════════════════════════
+  # Cover Letter 文案模块
+  # ═══════════════════════════════════════════════════════════
+  /cover-letter/generate:
+    post:
+      tags: [CoverLetter]
+      summary: 生成打招呼语（3 个版本）
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId]
+              properties:
+                jobId: { type: string }
+                style: { type: string, enum: [professional, concise, portfolio], default: professional }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  versions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        style: { type: string }
+                        text: { type: string }
+                    maxItems: 3
+
+  # ═══════════════════════════════════════════════════════════
+  # Application 投递模块
+  # ═══════════════════════════════════════════════════════════
+  /application:
+    get:
+      tags: [Application]
+      summary: 获取投递列表（可按状态筛选）
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [interested, applied, communicating, interviewing, offered, rejected] }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Application"
+    post:
+      tags: [Application]
+      summary: 创建投递记录
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jobId, matchResultId]
+              properties:
+                jobId: { type: string }
+                matchResultId: { type: string }
+                coverLetter: { type: string }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+
+  /application/{applicationId}:
+    patch:
+      tags: [Application]
+      summary: 更新投递状态
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [applied, communicating, interviewing, offered, rejected]
+                note: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Application"
+
+  /application/funnel:
+    get:
+      tags: [Application]
+      summary: 获取投递漏斗数据
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, default: 30 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  receivedPush: { type: integer }
+                  interested: { type: integer }
+                  applied: { type: integer }
+                  communicating: { type: integer }
+                  interviewing: { type: integer }
+                  offered: { type: integer }
+                  conversionRate: { type: number, description: "投递转化率 %" }
+
+  # ═══════════════════════════════════════════════════════════
+  # Order 支付模块
+  # ═══════════════════════════════════════════════════════════
+  /order:
+    post:
+      tags: [Order]
+      summary: 创建订阅订单
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan, payMethod]
+              properties:
+                plan: { type: string, enum: [basic, pro, premium] }
+                payMethod: { type: string, enum: [wechat, alipay] }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orderId: { type: string }
+                  paymentUrl: { type: string, description: "微信/支付宝支付链接或SDK参数" }
+
+  /order/{orderId}/status:
+    get:
+      tags: [Order]
+      summary: 查询订单支付状态
+      security: [{ BearerAuth: [] }]
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [pending, paid, expired, refunded] }
+
+  /subscription:
+    get:
+      tags: [Order]
+      summary: 获取当前订阅状态
+      security: [{ BearerAuth: [] }]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan: { type: string }
+                  studentDiscount: { type: boolean }
+                  expireAt: { type: string, format: date-time }
+                  autoRenew: { type: boolean }
+
+  # ═══════════════════════════════════════════════════════════
+  # Notification 推送模块（内部）
+  # ═══════════════════════════════════════════════════════════
+  /notification/register-device:
+    post:
+      tags: [Notification]
+      summary: 注册设备推送 Token
+      security: [{ BearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, platform]
+              properties:
+                token: { type: string }
+                platform: { type: string, enum: [ios, android] }
+      responses:
+        "200": { description: "已注册" }
+
+# ═══════════════════════════════════════════════════════════
+# Components — 可复用 Schema
+# ═══════════════════════════════════════════════════════════
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        phone: { type: string, description: "脱敏显示 138****8000" }
+        nickname: { type: string }
+        avatar: { type: string, nullable: true }
+        schoolVerified: { type: boolean }
+        schoolTier: { type: string, enum: ["985_211", "double_first_class", "regular", "junior_college"], nullable: true }
+        major: { type: string, nullable: true }
+        degree: { type: string, enum: [bachelor, master, phd, junior_college], nullable: true }
+        graduationYear: { type: integer, nullable: true }
+        subscribed: { type: boolean }
+        subscribePlan: { type: string, enum: [basic, pro, premium], nullable: true }
+        subscribeExpireAt: { type: string, format: date-time, nullable: true }
+        studentDiscount: { type: boolean }
+        createdAt: { type: string, format: date-time }
+      required: [id, phone, nickname, subscribed, studentDiscount, createdAt]
+
+    Resume:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string }
+        version: { type: integer }
+        isCurrent: { type: boolean }
+        source: { type: string, enum: [pdf, word, photo, online, wechat] }
+        structure: { $ref: "#/components/schemas/ResumeStructure" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, userId, version, isCurrent, source, createdAt]
+
+    ResumeStructure:
+      type: object
+      properties:
+        basics:
+          type: object
+          properties:
+            name: { type: string }
+            phone: { type: string }
+            email: { type: string }
+            school: { type: string }
+            major: { type: string }
+            degree: { type: string }
+            graduationYear: { type: integer }
+        education:
+          type: array
+          items:
+            type: object
+            properties:
+              school: { type: string }
+              major: { type: string }
+              degree: { type: string }
+              startDate: { type: string }
+              endDate: { type: string }
+              gpa: { type: string }
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              role: { type: string }
+              startDate: { type: string }
+              endDate: { type: string }
+              description: { type: string }
+              technologies: { type: array, items: { type: string } }
+        internships:
+          type: array
+          items:
+            type: object
+            properties:
+              company: { type: string }
+              position: { type: string }
+              startDate: { type: string }
+              endDate: { type: string }
+              description: { type: string }
+        competitions:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              level: { type: string }
+              date: { type: string }
+              award: { type: string }
+              description: { type: string }
+        skills:
+          type: array
+          items: { type: string }
+        selfEvaluation: { type: string }
+
+    AiRewriteRecord:
+      type: object
+      properties:
+        field: { type: string }
+        original: { type: string }
+        suggested: { type: string }
+        reason: { type: string }
+        status: { type: string, enum: [accepted, rejected, modified] }
+        userFinal: { type: string, nullable: true }
+
+    Preference:
+      type: object
+      properties:
+        cities: { type: array, items: { type: string }, maxItems: 3 }
+        industries: { type: array, items: { type: string }, maxItems: 3 }
+        salaryMin: { type: integer, nullable: true }
+        degree: { type: string, enum: [bachelor, master, phd, junior_college, any], nullable: true }
+        keywords: { type: array, items: { type: string }, maxItems: 5 }
+        acceptRelocate: { type: boolean }
+        excludeCompanies: { type: array, items: { type: string } }
+        excludeKeywords: { type: array, items: { type: string } }
+      required: [cities, industries, acceptRelocate]
+
+    JobSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        company:
+          type: object
+          properties:
+            name: { type: string }
+            logo: { type: string }
+            industry: { type: string }
+            size: { type: string }
+        city: { type: string }
+        salaryMin: { type: integer }
+        salaryMax: { type: integer }
+        salaryMonths: { type: integer }
+        degree: { type: string }
+        matchScore: { type: integer, nullable: true, description: "当前用户的匹配分" }
+        publishedAt: { type: string, format: date-time }
+      required: [id, title, city, publishedAt]
+
+    JobDetail:
+      allOf:
+        - $ref: "#/components/schemas/JobSummary"
+        - type: object
+          properties:
+            source: { type: string, enum: [zhipin, zhilian, 51job, liepin, lagou] }
+            district: { type: string }
+            experience: { type: string }
+            jdText: { type: string }
+            jdStructured:
+              type: object
+              properties:
+                responsibilities: { type: array, items: { type: string } }
+                requirements: { type: array, items: { type: string } }
+                skills: { type: array, items: { type: string } }
+            matchedSkills: { type: array, items: { type: string } }
+            gaps: { type: array, items: { type: string } }
+            hrInfo:
+              type: object
+              properties:
+                name: { type: string }
+                title: { type: string }
+                activeDays: { type: integer }
+            status: { type: string, enum: [active, offline] }
+
+    MatchResult:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        job: { $ref: "#/components/schemas/JobSummary" }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        reasons: { type: array, items: { type: string }, maxItems: 3 }
+        matchedSkills: { type: array, items: { type: string } }
+        gaps: { type: array, items: { type: string } }
+        userStatus:
+          type: string
+          enum: [pending, interested, not_interested, deferred, applied, communicating, interviewing, offered, rejected]
+        feedbackAt: { type: string, format: date-time, nullable: true }
+      required: [id, job, score, reasons, matchedSkills, gaps, userStatus]
+
+    Application:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        job: { $ref: "#/components/schemas/JobSummary" }
+        matchResultId: { type: string }
+        status: { type: string, enum: [interested, applied, communicating, interviewing, offered, rejected] }
+        coverLetter: { type: string }
+        appliedAt: { type: string, format: date-time, nullable: true }
+        timeline:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              at: { type: string, format: date-time }
+              note: { type: string }
+      required: [id, job, matchResultId, status]
